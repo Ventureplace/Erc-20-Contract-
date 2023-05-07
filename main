@@ -1,0 +1,78 @@
+pragma solidity ^0.8.0;
+
+import "./IERC20.sol";
+import "./SafeMath.sol";
+
+contract MyToken is IERC20 {
+    using SafeMath for uint256;
+
+    string public name = "My Token";
+    string public symbol = "MYT";
+    uint8 public decimals = 18;
+    uint256 public totalSupply = 1000000000 * (10 ** uint256(decimals)); // 1 billion tokens
+
+    address public owner;
+    uint256 public launchTime;
+    uint256 public initialPrice = 1000; // Initial token price in wei
+    uint256 public currentPrice = initialPrice; // Current token price in wei
+    uint256 public totalSold = 0; // Total number of tokens sold
+    uint256 public reserve = totalSupply.div(2); // Reserve tokens for future use
+
+    mapping (address => uint256) public balanceOf;
+    mapping (address => mapping (address => uint256)) public allowance;
+
+    event Buy(address indexed buyer, uint256 indexed amount, uint256 indexed price);
+    event Sell(address indexed seller, uint256 indexed amount, uint256 indexed price);
+    event SetPrice(uint256 indexed price);
+
+    constructor() {
+        owner = msg.sender;
+        launchTime = block.timestamp;
+        balanceOf[msg.sender] = totalSupply.sub(reserve);
+        balanceOf[address(this)] = reserve;
+    }
+
+    function buy() public payable returns (bool) {
+        require(block.timestamp >= launchTime + 7 days, "Token sale is not yet open.");
+        require(msg.value > 0, "Insufficient value sent.");
+        uint256 amount = msg.value.mul(currentPrice).div(1 ether);
+        require(totalSold.add(amount) <= totalSupply.sub(reserve), "Insufficient tokens left for sale.");
+        balanceOf[msg.sender] = balanceOf[msg.sender].add(amount);
+        balanceOf[address(this)] = balanceOf[address(this)].sub(amount);
+        totalSold = totalSold.add(amount);
+        emit Buy(msg.sender, amount, currentPrice);
+        return true;
+    }
+
+    function sell(uint256 amount) public returns (bool) {
+        require(block.timestamp >= launchTime + 30 days, "Token sale is still ongoing.");
+        require(amount > 0, "Invalid amount to sell.");
+        require(amount <= balanceOf[msg.sender], "Insufficient balance.");
+        uint256 value = amount.mul(currentPrice).div(1 ether);
+        balanceOf[msg.sender] = balanceOf[msg.sender].sub(amount);
+        balanceOf[address(this)] = balanceOf[address(this)].add(amount);
+        payable(msg.sender).transfer(value);
+        emit Sell(msg.sender, amount, currentPrice);
+        return true;
+    }
+
+    function setPrice(uint256 price) public {
+        require(msg.sender == owner, "Only the owner can set the price.");
+        require(price > 0, "Invalid price.");
+        currentPrice = price;
+        emit SetPrice(price);
+    }
+
+    function transfer(address to, uint256 value) public override returns (bool success) {
+        require(value > 0, "Invalid value to transfer.");
+        require(balanceOf[msg.sender] >= value, "Insufficient balance.");
+        balanceOf[msg.sender] = balanceOf[msg.sender].sub(value);
+        balanceOf[to] = balanceOf[to].add(value);
+        emit Transfer(msg.sender, to, value);
+        return true;
+    }
+
+    function approve(address spender, uint256 value) public override returns (bool success) {
+        require(value > 0, "Invalid value to approve.");
+        allowance[msg.sender][spender] = value;
+        emit Approval(msg
